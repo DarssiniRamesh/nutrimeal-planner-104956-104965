@@ -63,6 +63,13 @@ function App() {
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
+  // For onboarding tooltips
+  const [onboardStep, setOnboardStep] = useState(() => {
+    try {
+      return Number(localStorage.getItem('onboardStep') || 0);
+    } catch { return 0; }
+  });
+
   // Loads meals for the current user, filtered by date if provided
   async function loadMeals(date) {
     setLoading(true);
@@ -70,6 +77,10 @@ function App() {
     try {
       const result = await getMeals(date ? { date } : {});
       setMeals(result || []);
+      if (onboardStep === 1 && result && result.length) {
+        // After first meal, show next tooltip
+        setTimeout(() => setOnboardStep(2), 850);
+      }
     } catch (err) {
       setError(err.message || "Could not fetch meal data");
     }
@@ -212,6 +223,7 @@ function App() {
           prev.map(m => (m.id === editingMeal.id ? { ...m, ...mealRes } : m))
         );
         setSuccessMsg("Meal updated!");
+        if (onboardStep === 0) setOnboardStep(1); // If first edit, trigger onboarding
       } else {
         // Add mode
         mealRes = await createMeal(mealInput);
@@ -220,6 +232,7 @@ function App() {
           setMeals(prev => [mealRes, ...prev]);
         }
         setSuccessMsg("Meal added!");
+        if (onboardStep === 0) setOnboardStep(1);
       }
       setShowMealForm(false);
       setEditingMeal(null);
@@ -235,20 +248,52 @@ function App() {
     setEditingMeal(null);
   };
 
-  // Navigation, sidebar, layout, dialogs
+  // Duplicate meal (shallow clone for add new meal form)
+  const handleDuplicateMeal = meal => {
+    if (!meal) return;
+    setEditingMeal({
+      ...meal,
+      id: undefined, // Remove id so Supabase will make new id
+      date: new Date().toISOString().slice(0, 10)
+    });
+    setShowMealForm(true);
+    setSuccessMsg("Duplicating meal for quick entry");
+  };
+
+  // Navigation, sidebar, layout, dialogs & onboarding tips
   return (
-    <div className="App" style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
+    <div className="App" style={{ background: 'var(--bg-primary)', minHeight: '100vh', position: "relative" }}>
       {/* Top navigation bar */}
       <nav className="top-nav" style={{
         background: '#2D9CDB', color: '#fff', display: 'flex',
         alignItems: 'center', justifyContent: 'space-between', padding: '1rem 2rem', boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
       }}>
-        <div style={{ fontWeight: 700, fontSize: '1.3rem', letterSpacing: 1, display: 'flex', alignItems: 'center' }}>
+        <div style={{ fontWeight: 700, fontSize: '1.3rem', letterSpacing: 1, display: 'flex', alignItems: 'center', position: "relative" }}>
           <span role="img" aria-label="meal" style={{ fontSize: 24, marginRight: 8 }}>🍽️</span>
           NutriMeal Planner
+          {/* Onboarding tooltip for new users */}
+          {(onboardStep === 0) && (
+            <div className="onboard-tip" style={{
+              position: "absolute",
+              bottom: -17, left: 10,
+              background: "#fffbe3",
+              color: "#222",
+              fontSize: 15,
+              borderRadius: 7,
+              boxShadow: "0 2px 9px -2px #F2994A66",
+              padding: "7px 15px 6px 12px",
+              maxWidth: 250,
+              zIndex: 50,
+              border: "1.2px solid #fec96e",
+              fontWeight: 500
+            }}>
+              👋 Welcome! Start by adding a meal you like (click <b>+ Meal</b>).
+              <span style={{marginLeft:7, fontSize:13, color: "#F2994A", cursor: "pointer"}} onClick={() => {setOnboardStep(1); localStorage.setItem('onboardStep', 1)}} role="button">&times;</span>
+            </div>
+          )}
         </div>
         <div>
-          <Button className="theme-toggle" onClick={toggleTheme}>
+          <Button className="theme-toggle" onClick={toggleTheme} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}>
             {theme === 'light' ? '🌙' : '☀️'}
           </Button>
           <Button style={{ marginLeft: 10 }} onClick={handleAddMeal}>+ Meal</Button>
@@ -271,7 +316,8 @@ function App() {
           }}
         >
           <div style={{
-            padding: '2rem 1rem 1rem 1.2rem', fontWeight: 600, fontSize: 18, borderBottom: '1px solid #219150'
+            padding: '2rem 1rem 1rem 1.2rem', fontWeight: 600, fontSize: 18, borderBottom: '1px solid #219150',
+            position: "relative"
           }}>
             Menu
             <Button className="close-btn"
@@ -290,7 +336,25 @@ function App() {
             >&times;</Button>
           </div>
           <ul style={{ padding: 0, margin: 0, listStyle: 'none', fontSize: 15 }}>
-            <li style={{ padding: '16px 12px', cursor: 'pointer' }} onClick={() => setSelectedDate(new Date().toISOString().slice(0,10))}><span role="img" aria-label="calendar">📅</span> Calendar</li>
+            <li
+              style={{ padding: '16px 12px', cursor: 'pointer', outline:"none" }}
+              tabIndex={0}
+              onClick={() => setSelectedDate(new Date().toISOString().slice(0,10))}
+              aria-label="Go to today in calendar"
+            ><span role="img" aria-label="calendar">📅</span> Calendar
+              {(onboardStep === 2) && (
+                <div className="onboard-tip" style={{
+                  position: "absolute",
+                  left: 240, top: 70,
+                  background: "#fffbe4", color: "#2d9cdb", fontWeight: 500,
+                  borderRadius: 7, boxShadow: "0 2px 9px -2px #2D9CDB66", padding: "8px 16px", maxWidth: 220,
+                  border: "1.2px solid #73caf9", fontSize: 14, zIndex: 90
+                }}>
+                  🎉 Meals saved! Explore your planner and recommended meals.
+                  <span style={{marginLeft:7, fontSize:13, color: "#2d9cdb", cursor: "pointer"}} onClick={() => {setOnboardStep(99); localStorage.setItem('onboardStep', 99)}} role="button">&times;</span>
+                </div>
+              )}
+            </li>
             <li style={{ padding: '16px 12px', cursor: 'pointer' }}>
               <span role="img" aria-label="rec">🥗</span> Recommendations
             </li>
@@ -318,6 +382,7 @@ function App() {
               boxShadow: '2px 3px 10px rgba(0,0,0,0.07)'
             }}
             onClick={() => setSideOpen(true)}
+            aria-label="Open sidebar navigation"
           >☰</Button>
         )}
         {/* Main content grid */}
@@ -336,7 +401,7 @@ function App() {
         >
           {/* Calendar & meals in grid */}
           <div style={{ display: 'flex', flexDirection: window.innerWidth < 700 ? 'column' : 'row', gap: 40 }}>
-            <div style={{ flex: 3 }}>
+            <div style={{ flex: 3, position: "relative" }}>
               <MealCalendar
                 meals={meals}
                 onSelectDay={d => d && setSelectedDate(d)}
@@ -344,12 +409,21 @@ function App() {
               />
               {error && <div style={{ color: "tomato", margin: "8px 0", fontSize: 16 }}>{error}</div>}
               {successMsg && <div style={{ color: "#219150", margin: "8px 0", fontSize: 16 }}>{successMsg}</div>}
-              {loading && <div style={{ color: "#888", margin: "8px 0" }}>Loading...</div>}
+              {loading && (
+                <div style={{
+                  margin: "8px 0", display: "flex", alignItems: "center",
+                  color: "#666"
+                }}>
+                  <span className="loader-dot"></span>
+                  <span style={{marginLeft:7}}>Loading...</span>
+                </div>
+              )}
               <MealList
                 meals={meals}
                 onEdit={handleEditMeal}
                 onDelete={handleDeleteMeal}
-                onView={() => {}}
+                onView={() => {}} // could expand for modal detail if needed
+                onDuplicate={handleDuplicateMeal}
               />
             </div>
             <div style={{ flex: 2, minWidth: 270 }}>
@@ -369,11 +443,11 @@ function App() {
                     placeholder="Add cuisine (e.g. Italian, Thai)…"
                     style={{
                       flex: 1,
-                      padding: "5px 10px",
+                      padding: "8px 10px", // improved touch target for mobile
                       borderRadius: 6,
                       border: "1.5px solid #eaeaea"
                     }}
-                    onKeyPress={e => {
+                    onKeyDown={e => {
                       if (e.key === "Enter" && cuisineInput.trim()) {
                         e.preventDefault();
                         if (!preferredCuisines.includes(cuisineInput.trim())) {
@@ -382,6 +456,7 @@ function App() {
                         setCuisineInput('');
                       }
                     }}
+                    tabIndex={0}
                   />
                   <Button
                     style={{ fontSize: 15, padding: "0.35em 1.1em", marginLeft: 3 }}
@@ -409,6 +484,7 @@ function App() {
                         display: "flex",
                         alignItems: "center"
                       }}
+                      tabIndex={0}
                     >
                       {c}
                       <span
@@ -424,6 +500,7 @@ function App() {
                         }
                         role="button"
                         aria-label="Remove cuisine"
+                        tabIndex={0}
                       >×</span>
                     </span>
                   ))}
@@ -455,7 +532,7 @@ function App() {
         onClose={() => setLookupOpen(false)}
         onSelect={() => setLookupOpen(false)}
       />
-      {/* Style block for modal dialogs and other modern UI tweaks */}
+      {/* Style block for modal dialogs, onboarding, loading dots */}
       <style>{`
         .modal-overlay {
           position: fixed; z-index: 500;
@@ -494,6 +571,9 @@ function App() {
         .side-menu {
           min-height: 100vh;
         }
+        .side-menu ul li, .main-content button, input, .main-content span, .main-content label {
+          touch-action: manipulation;
+        }
         .side-menu ul li:hover, .side-menu ul li:focus {
           background: rgba(0,0,0,0.10);
         }
@@ -504,6 +584,22 @@ function App() {
         }
         .main-content {
           min-height: 90vh;
+        }
+        .onboard-tip {
+          animation: fadeInOnboard .65s cubic-bezier(.72,1.57,.26,0.89);
+        }
+        @keyframes fadeInOnboard {
+          from { opacity: 0; transform: translateY(18px) scale(.94);}
+          to { opacity: 1; transform: translateY(0) scale(1);}
+        }
+        .loader-dot {
+          display:inline-block;width:14px;height:14px;border-radius:50%;background:#2D9CDB;animation:dotFlare 1.1s linear infinite;
+          vertical-align:middle;margin-right: 2px;
+        }
+        @keyframes dotFlare {
+          0% { transform: scale(1);}
+          40% { transform: scale(1.39);}
+          60% { transform: scale(1);}
         }
         @media (max-width:900px) {
           .side-menu {
@@ -521,6 +617,12 @@ function App() {
             flex-direction: column !important;
             gap: 24px !important;
           }
+          .side-menu { font-size:15px;}
+        }
+        /* Make buttons & form controls accessible/touch-friendly */
+        button, .btn, input[type='text'], input[type='date'], input[type='number'], textarea {
+          min-height: 36px;
+          font-size: 1rem;
         }
       `}</style>
     </div>
