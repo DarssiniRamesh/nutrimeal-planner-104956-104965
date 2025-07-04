@@ -2,10 +2,43 @@
  * PUBLIC_INTERFACE
  * USDA FoodData Central API Utility
  * Provides functions to search for foods, get nutrition details, using API key from .env.
+ *
+ * Defensive error handling for environment variable loading.
+ *
+ * - For Create React App: .env should be in the root of meal_planner_frontend.
+ * - Variable should be named REACT_APP_USDA_API_KEY.
+ * - Must restart the dev server after changing .env.
  */
 
 const BASE_URL = process.env.REACT_APP_USDA_API_BASE_URL || "https://api.nal.usda.gov/fdc/v1/";
 const API_KEY = process.env.REACT_APP_USDA_API_KEY;
+
+// Diagnostic: Log variable presence in development mode (never log the actual key)
+if (process.env.NODE_ENV === "development") {
+  // eslint-disable-next-line no-console
+  console.log("USDA API Key loaded?", !!API_KEY, "(REACT_APP_USDA_API_KEY defined in env)", process.env.REACT_APP_USDA_API_KEY ? "(Found)" : "(Missing or not loaded)");
+}
+
+/**
+ * Throws a diagnostic error if the USDA API key is missing.
+ */
+function requireUsdaApiKey() {
+  if (!API_KEY) {
+    let details =
+      "USDA API key missing. This is required to access the FoodData Central API.\n\n" +
+      "Troubleshooting:\n" +
+      "- Ensure .env exists in 'meal_planner_frontend/' directory (NOT project root).\n" +
+      "- The variable name must be REACT_APP_USDA_API_KEY.\n" +
+      "- You MUST restart the dev server after editing .env (stop and re-run 'npm start').\n" +
+      "- Do NOT commit your actual API key to version control.\n" +
+      "- To see variables loaded, add 'console.log(process.env.REACT_APP_USDA_API_KEY);' in your code.\n";
+    // Show all env keys for developers (not in production)
+    if (process.env.NODE_ENV !== "production") {
+      details += "\nLoaded env keys: " + Object.keys(process.env).filter(k => k.startsWith("REACT_APP_")).join(", ");
+    }
+    throw new Error(details);
+  }
+}
 
 /**
  * PUBLIC_INTERFACE
@@ -16,7 +49,7 @@ const API_KEY = process.env.REACT_APP_USDA_API_KEY;
  * Throws error with status if API rate/bad key/server issue.
  */
 export async function searchFoods(query, pageSize = 20) {
-  if (!API_KEY) throw new Error("USDA API key missing. Check .env config.");
+  requireUsdaApiKey();
   if (!query || typeof query !== "string" || !query.trim()) {
     throw new Error("Search term required for food lookup.");
   }
@@ -45,7 +78,7 @@ export async function searchFoods(query, pageSize = 20) {
  * Throws error for failed API/invalid FDC ID.
  */
 export async function getFoodDetails(fdcId) {
-  if (!API_KEY) throw new Error("USDA API key missing. Check .env config.");
+  requireUsdaApiKey();
   if (!fdcId) throw new Error("fdcId required for food detail lookup.");
   let url = `${BASE_URL}food/${fdcId}?api_key=${API_KEY}`;
   try {
