@@ -6,9 +6,20 @@ import { createClient } from "@supabase/supabase-js";
  * Assumes user is authenticated with Supabase Auth. See frontend/README.md for .env config notes.
  */
 
-// Bootstrap client via environment var config
+/**
+ * Bootstrap client via environment variable config.
+ * Throws an error if required variables are not properly loaded.
+ */
 const SUPABASE_URL = process.env.REACT_APP_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error(
+    "Supabase environment variables are missing. " +
+    "Please check your .env file for REACT_APP_SUPABASE_URL and REACT_APP_SUPABASE_ANON_KEY."
+  );
+}
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /**
