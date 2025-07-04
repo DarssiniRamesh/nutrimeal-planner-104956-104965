@@ -6,6 +6,12 @@ import MealList from './components/MealList';
 import NutritionLookupModal from './components/NutritionLookupModal';
 import Recommendations from './components/Recommendations';
 import Button from './components/ui/Button';
+import {
+  getMeals,
+  createMeal,
+  updateMeal,
+  deleteMeal,
+} from "./utils/supabaseService";
 
 /**
  * PUBLIC_INTERFACE
@@ -35,6 +41,28 @@ function App() {
   const [meals, setMeals] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
 
+  // UI loading/error management
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // CRUD: load all meals for the user
+  async function loadMeals() {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await getMeals();
+      setMeals(result || []);
+    } catch (err) {
+      setError(err.message || "Could not fetch meal data");
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    loadMeals();
+    // If using real-time subscriptions, add here
+  }, []);
+
   // Responsive side menu logic
   useEffect(() => {
     function handleResize() {
@@ -52,24 +80,61 @@ function App() {
   // PUBLIC_INTERFACE
   const toggleTheme = () => setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
 
-  // CRUD dummy handlers
+  // Supabase CRUD-connected handlers
+  // open form for add
   const handleAddMeal = () => {
     setEditingMeal(null);
     setShowMealForm(true);
   };
+
+  // open form for edit
   const handleEditMeal = meal => {
     setEditingMeal(meal);
     setShowMealForm(true);
   };
-  const handleDeleteMeal = meal => {
-    // TODO: Delete logic
-    setMeals(prev => prev.filter(m => m !== meal));
+
+  // Delete meal, update UI and show errors
+  const handleDeleteMeal = async meal => {
+    if (!meal?.id) return;
+    if (!window.confirm("Delete this meal? This action cannot be undone.")) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await deleteMeal(meal.id);
+      setMeals(prev => prev.filter(m => m.id !== meal.id));
+    } catch (e) {
+      setError(e.message || "Could not delete meal.");
+    } finally {
+      setLoading(false);
+    }
   };
-  const handleFormSubmit = meal => {
-    // TODO: Upsert meal logic
-    setShowMealForm(false);
-    setEditingMeal(null);
+
+  // Add/edit submit (upsert), update UI and show errors
+  const handleFormSubmit = async mealInput => {
+    setLoading(true);
+    setError(null);
+    try {
+      let mealRes;
+      if (editingMeal && editingMeal.id) {
+        // Update mode
+        mealRes = await updateMeal(editingMeal.id, mealInput);
+        setMeals(prev =>
+          prev.map(m => (m.id === editingMeal.id ? { ...m, ...mealRes } : m))
+        );
+      } else {
+        // Add mode
+        mealRes = await createMeal(mealInput);
+        setMeals(prev => [mealRes, ...prev]);
+      }
+      setShowMealForm(false);
+      setEditingMeal(null);
+    } catch (e) {
+      setError(e.message || "Could not save meal.");
+    } finally {
+      setLoading(false);
+    }
   };
+
   const handleFormCancel = () => {
     setShowMealForm(false);
     setEditingMeal(null);

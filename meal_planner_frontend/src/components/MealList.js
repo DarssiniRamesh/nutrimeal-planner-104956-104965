@@ -6,15 +6,14 @@ import React from "react";
  * Supports action buttons (edit, delete, view) for each meal.
  */
 function MealList({ meals, onEdit, onDelete, onView }) {
-  // TODO: Implement UI for displaying meals and action buttons
+  // Renders meal items, using meal.id as key to support uuid updates
   return (
     <div>
       <h2>Meals</h2>
       <ul>
-        {/* Render meal items here */}
         {meals && meals.length > 0
-          ? meals.map((meal, idx) => (
-              <li key={idx}>
+          ? meals.map((meal) => (
+              <li key={meal.id || meal.name}>
                 {meal.name}
                 <button onClick={() => onView(meal)}>View</button>
                 <button onClick={() => onEdit(meal)}>Edit</button>

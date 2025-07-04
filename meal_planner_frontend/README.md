@@ -11,6 +11,17 @@ This project provides a minimal React template with a clean, modern UI and minim
 
 ## Getting Started
 
+### Environment Setup
+
+You must configure a `.env` file in the project root with your Supabase project details:
+
+```
+REACT_APP_SUPABASE_URL=your_supabase_url
+REACT_APP_SUPABASE_ANON_KEY=your_anon_key
+```
+
+See [Supabase docs](https://supabase.com/docs/guides/getting-started/quickstarts/react) for details.
+
 In the project directory, you can run:
 
 ### `npm start`
