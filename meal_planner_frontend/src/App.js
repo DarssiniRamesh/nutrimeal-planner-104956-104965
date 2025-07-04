@@ -12,6 +12,8 @@ import {
   updateMeal,
   deleteMeal,
 } from "./utils/supabaseService";
+// Reuse USDA API utility for suggestion fetches
+import { searchFoods } from "./utils/usdaApi";
 
 /**
  * PUBLIC_INTERFACE
@@ -40,6 +42,16 @@ function App() {
   // Main meal data, recommendations (stubbed/demo for now)
   const [meals, setMeals] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
+
+  // Cuisine preference and UI state for it
+  const [preferredCuisines, setPreferredCuisines] = useState(() => {
+    // Try to load from localStorage for persistence
+    try {
+      const stored = localStorage.getItem('preferredCuisines');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+  const [cuisineInput, setCuisineInput] = useState('');
 
   // Calendar selection state
   const [selectedDate, setSelectedDate] = useState(
@@ -79,10 +91,78 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Effect to set theme color
+  // Fetch recommendations from history and USDA API when meals/cuisines change
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+    async function fetchRecommendations() {
+      // Find meal names & cuisines from local meal history
+      const localSuggestions = [];
+      const namesSeen = {};
+      for (const meal of meals) {
+        // Favor ones matching preferred cuisines, else include all recipes
+        if (
+          meal.name &&
+          (!preferredCuisines.length ||
+            preferredCuisines.some(c =>
+              meal.cuisine && typeof meal.cuisine === "string"
+                ? meal.cuisine.toLowerCase().includes(c.toLowerCase())
+                : false))
+        ) {
+          // Avoid duplicate names in local history
+          if (!namesSeen[meal.name.toLowerCase()]) {
+            localSuggestions.push({
+              name: meal.name,
+              source: "history",
+              cuisine: meal.cuisine,
+              calories: meal.calories,
+              nutrition_info: meal.nutrition_info,
+            });
+            namesSeen[meal.name.toLowerCase()] = true;
+          }
+        }
+      }
+      // Fetch USDA API suggestions for each cuisine (limit per cuisine)
+      const usdaSuggestions = [];
+      for (const cuisine of preferredCuisines.slice(0, 3)) {
+        try {
+          const apiData = await searchFoods(cuisine, 5);
+          if (apiData.foods && Array.isArray(apiData.foods)) {
+            for (const f of apiData.foods) {
+              // Skip meals already in user's meal history (by name)
+              if (namesSeen[f.description?.toLowerCase?.() || ""]) continue;
+              usdaSuggestions.push({
+                name: f.description,
+                source: "USDA",
+                cuisine,
+                calories: f.labelNutrients?.calories?.value,
+                nutrition_info: f,
+              });
+              namesSeen[f.description?.toLowerCase?.() || ""] = true;
+            }
+          }
+        } catch (e) {
+          // In case of USDA API/rate errors, just skip for now & proceed
+        }
+      }
+      // Shuffle recommendations to blend local & usda, more engaging
+      function shuffle(arr) {
+        const a = [...arr];
+        for (let i = a.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      }
+      setRecommendations(shuffle(localSuggestions.concat(usdaSuggestions)));
+    }
+    fetchRecommendations();
+  }, [meals, preferredCuisines]);
+
+  // Effect to persist cuisine preference
+  useEffect(() => {
+    try {
+      localStorage.setItem("preferredCuisines", JSON.stringify(preferredCuisines));
+    } catch {}
+  }, [preferredCuisines]);
 
   // PUBLIC_INTERFACE
   const toggleTheme = () => setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
@@ -273,7 +353,87 @@ function App() {
               />
             </div>
             <div style={{ flex: 2, minWidth: 270 }}>
-              <Recommendations recommendations={recommendations} onAddMeal={handleAddMeal} />
+              <div style={{
+                background: "#f6fafd",
+                borderRadius: 10,
+                padding: "14px 14px 5px 14px",
+                marginBottom: 10,
+                marginTop: 5,
+                boxShadow: "0 1px 3px -2px #2D9CDB22"
+              }}>
+                <strong style={{color: "#27AE60", fontWeight: 600}}>Your Favorite Cuisines</strong>
+                <div style={{ display: "flex", gap: 6, margin: "9px 0" }}>
+                  <input
+                    value={cuisineInput}
+                    onChange={e => setCuisineInput(e.target.value)}
+                    placeholder="Add cuisine (e.g. Italian, Thai)…"
+                    style={{
+                      flex: 1,
+                      padding: "5px 10px",
+                      borderRadius: 6,
+                      border: "1.5px solid #eaeaea"
+                    }}
+                    onKeyPress={e => {
+                      if (e.key === "Enter" && cuisineInput.trim()) {
+                        e.preventDefault();
+                        if (!preferredCuisines.includes(cuisineInput.trim())) {
+                          setPreferredCuisines(prev => [...prev, cuisineInput.trim()]);
+                        }
+                        setCuisineInput('');
+                      }
+                    }}
+                  />
+                  <Button
+                    style={{ fontSize: 15, padding: "0.35em 1.1em", marginLeft: 3 }}
+                    onClick={() => {
+                      if (cuisineInput.trim() && !preferredCuisines.includes(cuisineInput.trim())) {
+                        setPreferredCuisines(prev => [...prev, cuisineInput.trim()]);
+                      }
+                      setCuisineInput('');
+                    }}
+                  >Add</Button>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 3 }}>
+                  {preferredCuisines.length === 0 && (
+                    <span style={{ fontSize: 14, color: "#666" }}>(Set cuisines to get better recommendations)</span>
+                  )}
+                  {preferredCuisines.map((c, idx) => (
+                    <span key={c}
+                      style={{
+                        background: "#2D9CDB",
+                        color: "#fff",
+                        borderRadius: 7,
+                        padding: "2.5px 12px",
+                        marginTop: 1,
+                        fontSize: 15,
+                        display: "flex",
+                        alignItems: "center"
+                      }}
+                    >
+                      {c}
+                      <span
+                        style={{
+                          marginLeft: 7,
+                          cursor: "pointer",
+                          fontWeight: "bold"
+                        }}
+                        onClick={() =>
+                          setPreferredCuisines(off =>
+                            off.filter(_c => _c !== c)
+                          )
+                        }
+                        role="button"
+                        aria-label="Remove cuisine"
+                      >×</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <Recommendations
+                recommendations={recommendations}
+                onAddMeal={handleAddMeal}
+                cuisines={preferredCuisines}
+              />
             </div>
           </div>
         </main>
