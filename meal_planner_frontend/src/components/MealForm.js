@@ -1,10 +1,12 @@
 import React, { useState } from "react";
+import NutritionLookupModal from "./NutritionLookupModal";
 
 /**
  * PUBLIC_INTERFACE
  * MealForm provides a form to add or edit a meal.
  * Includes meal name, date, ingredients, calories, nutrition info, cuisine.
  * All fields except nutrition info, cuisine are required. Ingredients is a list of strings.
+ * Now supports: "Add Nutrition Info From USDA" (`nutritionInfoText` field populates from modal selector).
  */
 function MealForm({ initialData, onSubmit, onCancel }) {
   const [name, setName] = useState(initialData?.name || "");
@@ -27,12 +29,30 @@ function MealForm({ initialData, onSubmit, onCancel }) {
   );
   const [error, setError] = useState(null);
 
+  // Support showing USDA modal
+  const [usdaModalOpen, setUSDAModalOpen] = useState(false);
+
   function handleIngredientsInput(e) {
     setIngredientsText(e.target.value);
   }
 
   function handleNutritionInput(e) {
     setNutritionInfoText(e.target.value);
+  }
+
+  // Handler: pull nutrition obj from modal and populate textarea and calories field
+  function handleUSDASelect(nutrObj) {
+    if (typeof nutrObj !== "object" || !nutrObj) return;
+    try {
+      setNutritionInfoText(JSON.stringify(nutrObj, null, 2));
+      // Try to extract calories and auto-fill
+      if (nutrObj.labelNutrients && nutrObj.labelNutrients.calories && nutrObj.labelNutrients.calories.value) {
+        setCalories(String(nutrObj.labelNutrients.calories.value));
+      } else if (nutrObj.foodNutrients) {
+        const en = nutrObj.foodNutrients.find(n => n.nutrientName && n.nutrientName.toLowerCase().includes("energy") && n.unitName && n.unitName.toLowerCase().includes("kcal"));
+        if (en && typeof en.value === "number") setCalories(String(en.value));
+      }
+    } catch {}
   }
 
   async function handleSubmit(e) {
@@ -147,9 +167,15 @@ function MealForm({ initialData, onSubmit, onCancel }) {
               placeholder="Paste JSON here (optional)"
               value={nutritionInfoText}
               rows={2}
-              style={{ minWidth: 220 }}
+              style={{ minWidth: 220, fontFamily: "monospace" }}
               onChange={handleNutritionInput}
             />
+            <button
+              type="button"
+              style={{ marginLeft: 8, background: "#27AE60", color: "#fff", padding: "2px 12px", fontWeight: 600, borderRadius: 7 }}
+              onClick={() => setUSDAModalOpen(true)}>
+              Add Nutrition From USDA
+            </button>
           </label>
         </div>
         <div style={{ marginTop: 14 }}>
@@ -162,6 +188,12 @@ function MealForm({ initialData, onSubmit, onCancel }) {
           )}
         </div>
       </form>
+      {/* USDA Lookup Modal for live nutrition lookup */}
+      <NutritionLookupModal
+        isOpen={usdaModalOpen}
+        onClose={() => setUSDAModalOpen(false)}
+        onSelect={handleUSDASelect}
+      />
     </div>
   );
 }
