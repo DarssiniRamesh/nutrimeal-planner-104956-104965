@@ -41,16 +41,22 @@ function App() {
   const [meals, setMeals] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
 
+  // Calendar selection state
+  const [selectedDate, setSelectedDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+
   // UI loading/error management
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
 
-  // CRUD: load all meals for the user
-  async function loadMeals() {
+  // Loads meals for the current user, filtered by date if provided
+  async function loadMeals(date) {
     setLoading(true);
     setError(null);
     try {
-      const result = await getMeals();
+      const result = await getMeals(date ? { date } : {});
       setMeals(result || []);
     } catch (err) {
       setError(err.message || "Could not fetch meal data");
@@ -58,10 +64,11 @@ function App() {
     setLoading(false);
   }
 
+  // Listens to calendar date change and loads meals for that day
   useEffect(() => {
-    loadMeals();
+    loadMeals(selectedDate);
     // If using real-time subscriptions, add here
-  }, []);
+  }, [selectedDate]);
 
   // Responsive side menu logic
   useEffect(() => {
@@ -99,9 +106,11 @@ function App() {
     if (!window.confirm("Delete this meal? This action cannot be undone.")) return;
     setLoading(true);
     setError(null);
+    setSuccessMsg(null);
     try {
       await deleteMeal(meal.id);
       setMeals(prev => prev.filter(m => m.id !== meal.id));
+      setSuccessMsg("Meal deleted!");
     } catch (e) {
       setError(e.message || "Could not delete meal.");
     } finally {
@@ -113,6 +122,7 @@ function App() {
   const handleFormSubmit = async mealInput => {
     setLoading(true);
     setError(null);
+    setSuccessMsg(null);
     try {
       let mealRes;
       if (editingMeal && editingMeal.id) {
@@ -121,10 +131,15 @@ function App() {
         setMeals(prev =>
           prev.map(m => (m.id === editingMeal.id ? { ...m, ...mealRes } : m))
         );
+        setSuccessMsg("Meal updated!");
       } else {
         // Add mode
         mealRes = await createMeal(mealInput);
-        setMeals(prev => [mealRes, ...prev]);
+        // Only show meal if for selected date
+        if (mealRes && mealRes.date === selectedDate) {
+          setMeals(prev => [mealRes, ...prev]);
+        }
+        setSuccessMsg("Meal added!");
       }
       setShowMealForm(false);
       setEditingMeal(null);
@@ -195,7 +210,7 @@ function App() {
             >&times;</Button>
           </div>
           <ul style={{ padding: 0, margin: 0, listStyle: 'none', fontSize: 15 }}>
-            <li style={{ padding: '16px 12px', cursor: 'pointer' }}><span role="img" aria-label="calendar">📅</span> Calendar</li>
+            <li style={{ padding: '16px 12px', cursor: 'pointer' }} onClick={() => setSelectedDate(new Date().toISOString().slice(0,10))}><span role="img" aria-label="calendar">📅</span> Calendar</li>
             <li style={{ padding: '16px 12px', cursor: 'pointer' }}>
               <span role="img" aria-label="rec">🥗</span> Recommendations
             </li>
@@ -242,12 +257,20 @@ function App() {
           {/* Calendar & meals in grid */}
           <div style={{ display: 'flex', flexDirection: window.innerWidth < 700 ? 'column' : 'row', gap: 40 }}>
             <div style={{ flex: 3 }}>
-              <MealCalendar meals={meals} onSelectDay={()=>{}} />
+              <MealCalendar
+                meals={meals}
+                onSelectDay={d => d && setSelectedDate(d)}
+                selectedDate={selectedDate}
+              />
+              {error && <div style={{ color: "tomato", margin: "8px 0", fontSize: 16 }}>{error}</div>}
+              {successMsg && <div style={{ color: "#219150", margin: "8px 0", fontSize: 16 }}>{successMsg}</div>}
+              {loading && <div style={{ color: "#888", margin: "8px 0" }}>Loading...</div>}
               <MealList
                 meals={meals}
                 onEdit={handleEditMeal}
                 onDelete={handleDeleteMeal}
-                onView={() => {}} />
+                onView={() => {}}
+              />
             </div>
             <div style={{ flex: 2, minWidth: 270 }}>
               <Recommendations recommendations={recommendations} onAddMeal={handleAddMeal} />
